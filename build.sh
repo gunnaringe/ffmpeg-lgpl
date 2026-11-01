@@ -40,10 +40,13 @@ linux-*) extra_ldflags=-static ;;
 windows-amd64)
 	host=x86_64-w64-mingw32 ext=.exe
 	cross="--enable-cross-compile --target-os=mingw32 --arch=x86_64 --cross-prefix=$host-"
-	cmake_cross="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64 -DCMAKE_C_COMPILER=$host-gcc -DCMAKE_CXX_COMPILER=$host-g++"
+	# Windows 7's API level for whisper.cpp: Ubuntu's mingw-w64 lacks the Windows 11 thread throttling ggml would
+	# use (it keeps its threads off parked cores; without it, Windows may put them on fewer cores).
+	cmake_cross="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64 -DCMAKE_C_COMPILER=$host-gcc -DCMAKE_CXX_COMPILER=$host-g++
+		-DCMAKE_C_FLAGS_INIT=-D_WIN32_WINNT=0x0601 -DCMAKE_CXX_FLAGS_INIT=-D_WIN32_WINNT=0x0601"
 	extra_ldflags="-static -static-libgcc -static-libstdc++" ;;
 darwin-*)
-	cxxlib=-lc++
+	cxxlib="-lc++ -framework Accelerate" # ggml's CPU code uses Accelerate's vDSP on a Mac
 	extra_cflags=-mmacosx-version-min=11.0
 	extra_ldflags=-mmacosx-version-min=11.0 ;;
 *) echo "unknown target $target" >&2; exit 2 ;;
