@@ -87,6 +87,19 @@ done
 sed -i.bak "s|^Libs:.*|Libs: -L\${libdir} -lwhisper -lggml -lggml-cpu -lggml-base $cxxlib -lm -lpthread|" "$prefix/lib/pkgconfig/whisper.pc"
 
 cd "$work/ffmpeg-$FFMPEG_VERSION"
+# Two fixes to the whisper filter. It moves what is left of its buffer to the start with memcpy, and the two overlap whenever more is
+# left than was transcribed: undefined, and a fortified libc (Alpine's) stops it with "Illegal instruction".
+# memmove is what it means (still so in FFmpeg's master).
+sed -i.bak 's/memcpy(wctx->audio_buffer, wctx->audio_buffer + samples,/memmove(wctx->audio_buffer, wctx->audio_buffer + samples,/' \
+	libavfilter/af_whisper.c
+# With a VAD model it transcribes at the first pause of half a second, so speech goes to whisper a sentence (3-5 s)
+# at a time; whisper works on 30 s whatever it is given, so that is about six times slower than whole windows. Wait
+# until the queue is half full, then cut at the last pause.
+sed -i 's|^    if (wctx->ctx_vad$|    if (wctx->ctx_vad \&\& wctx->audio_buffer_fill_size >= wctx->audio_buffer_queue_size / 2|' \
+	libavfilter/af_whisper.c
+grep -q 'memmove(wctx->audio_buffer, wctx->audio_buffer + samples,' libavfilter/af_whisper.c &&
+	grep -q 'if (wctx->ctx_vad && wctx->audio_buffer_fill_size >= wctx->audio_buffer_queue_size / 2' libavfilter/af_whisper.c ||
+	{ echo "the whisper filter's fixes did not apply" >&2; exit 1; }
 # shellcheck disable=SC2086
 ./configure --prefix="$prefix" $cross --pkg-config=pkg-config --pkg-config-flags=--static \
 	--extra-cflags="-I$prefix/include $extra_cflags" --extra-ldflags="-L$prefix/lib $extra_ldflags" \
