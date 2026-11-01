@@ -95,7 +95,7 @@ sed -i.bak 's/memcpy(wctx->audio_buffer, wctx->audio_buffer + samples,/memmove(w
 # With a VAD model it transcribes at the first pause of half a second, so speech goes to whisper a sentence (3-5 s)
 # at a time; whisper works on 30 s whatever it is given, so that is about six times slower than whole windows. Wait
 # until the queue is half full, then cut at the last pause.
-sed -i 's|^    if (wctx->ctx_vad$|    if (wctx->ctx_vad \&\& wctx->audio_buffer_fill_size >= wctx->audio_buffer_queue_size / 2|' \
+sed -i.bak 's|^    if (wctx->ctx_vad$|    if (wctx->ctx_vad \&\& wctx->audio_buffer_fill_size >= wctx->audio_buffer_queue_size / 2|' \
 	libavfilter/af_whisper.c
 grep -q 'memmove(wctx->audio_buffer, wctx->audio_buffer + samples,' libavfilter/af_whisper.c &&
 	grep -q 'if (wctx->ctx_vad && wctx->audio_buffer_fill_size >= wctx->audio_buffer_queue_size / 2' libavfilter/af_whisper.c ||
