@@ -132,6 +132,6 @@ jobs:
           cat > notes.md <<NOTES
           ffmpeg $FFMPEG_VERSION, built by [build.sh](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/build.sh) at ${{ github.sha }}: LGPL (no GPL or nonfree parts), static, with LAME $LAME_VERSION, Opus $OPUS_VERSION, zlib $ZLIB_VERSION and whisper.cpp $WHISPER_VERSION (the whisper filter, CPU only). Every build passed check.sh and all of Sermon Studio's Go tests on its own system.
 
-          The exact sources are attached, and the licences in LICENSES.txt.
+          The exact sources are attached, and the licences in LICENSES.txt. FFmpeg's whisper filter (libavfilter/af_whisper.c) is changed: two fixes, made by the attached build.sh with sed.
           NOTES
           gh release create "$RELEASE" dist/* --title "$RELEASE" --notes-file notes.md --target "${{ github.sha }}"

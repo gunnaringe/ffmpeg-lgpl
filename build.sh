@@ -17,6 +17,8 @@ out=$here/out
 work=$here/work/$target
 prefix=$work/prefix
 mkdir -p "$out/sources" "$work" "$prefix"
+# This script goes with the sources: it changes FFmpeg's whisper filter (below), and the LGPL wants that shown.
+cp "$here/build.sh" "$out/sources/"
 jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)
 
 fetch() { # fetch <url> <sha256> [name]: into out/sources (as name), checked
