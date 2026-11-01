@@ -66,14 +66,16 @@ cp "$work/opus-$OPUS_VERSION/config.guess" "$work/opus-$OPUS_VERSION/config.sub"
 	make -s -j"$jobs" && make -s install) >/dev/null
 
 # whisper.cpp: static, CPU only (no Metal, BLAS or OpenMP, nothing from the build machine). GGML_NATIVE=OFF: not
-# tuned to the CPU it is built on; on x86 that means AVX2, FMA and F16C (2013 and later), on arm64 NEON.
+# tuned to the CPU it is built on. On x86 it needs AVX and F16C (Intel from 2012, Ivy Bridge; AMD from 2011), not
+# AVX2 or FMA: servers and church computers of that age are common. Only the whisper filter uses them; on an older
+# processor it stops with "Illegal instruction" (Sermon Studio checks the processor first). arm64: NEON.
 # Its whisper.pc lists the libraries in an order a static link cannot use and leaves out ggml-cpu and C++.
 (cd "$work/whisper.cpp-$WHISPER_VERSION" &&
 	# shellcheck disable=SC2086
 	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DCMAKE_INSTALL_LIBDIR=lib $cmake_cross \
 		-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
-		-DGGML_METAL=OFF -DGGML_BLAS=OFF -DGGML_CCACHE=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF \
-		-DWHISPER_BUILD_SERVER=OFF &&
+		-DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_BMI2=OFF -DGGML_METAL=OFF -DGGML_BLAS=OFF -DGGML_CCACHE=OFF \
+		-DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF -DWHISPER_BUILD_SERVER=OFF &&
 	cmake --build build -j"$jobs" && cmake --install build) >/dev/null
 sed -i.bak "s|^Libs:.*|Libs: -L\${libdir} -lwhisper -lggml -lggml-cpu -lggml-base $cxxlib -lm -lpthread|" "$prefix/lib/pkgconfig/whisper.pc"
 
