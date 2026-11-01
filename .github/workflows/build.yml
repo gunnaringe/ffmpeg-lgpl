@@ -35,16 +35,16 @@ jobs:
         if: startsWith(matrix.target, 'linux-')
         run: |
           docker run --rm -v "$PWD:/f" -w /f alpine:3.22 sh -c \
-            'apk add -q --no-cache build-base nasm pkgconf curl xz perl coreutils && ./build.sh ${{ matrix.target }} && chmod -R a+rwX out'
+            'apk add -q --no-cache build-base cmake nasm pkgconf curl xz perl coreutils && ./build.sh ${{ matrix.target }} && chmod -R a+rwX out'
       - name: Build (Windows, mingw-w64)
         if: matrix.target == 'windows-amd64'
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64 nasm pkgconf >/dev/null
+          sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64 cmake nasm pkgconf >/dev/null
           ./build.sh windows-amd64
       - name: Build (macOS)
         if: startsWith(matrix.target, 'darwin-')
         run: |
-          brew install nasm pkgconf
+          brew install cmake nasm pkgconf
           ./build.sh ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
@@ -125,11 +125,12 @@ jobs:
           mkdir lic && for f in dist/*.tar.*; do tar -xf "$f" -C lic; done
           { for pair in "ffmpeg-$FFMPEG_VERSION/COPYING.LGPLv2.1:ffmpeg $FFMPEG_VERSION (LGPL 2.1 or later)" \
               "lame-$LAME_VERSION/COPYING:LAME $LAME_VERSION (LGPL 2 or later)" \
-              "opus-$OPUS_VERSION/COPYING:Opus $OPUS_VERSION (BSD)" "zlib-$ZLIB_VERSION/LICENSE:zlib $ZLIB_VERSION"; do
+              "opus-$OPUS_VERSION/COPYING:Opus $OPUS_VERSION (BSD)" "zlib-$ZLIB_VERSION/LICENSE:zlib $ZLIB_VERSION" \
+              "whisper.cpp-$WHISPER_VERSION/LICENSE:whisper.cpp $WHISPER_VERSION (MIT)"; do
               printf '==== %s ====\n\n' "${pair#*:}"; cat "lic/${pair%%:*}"; printf '\n\n'; done; } > dist/LICENSES.txt
           (cd dist && sha256sum * > SHA256SUMS)
           cat > notes.md <<NOTES
-          ffmpeg $FFMPEG_VERSION, built by [build.sh](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/build.sh) at ${{ github.sha }}: LGPL (no GPL or nonfree parts), static, with LAME $LAME_VERSION, Opus $OPUS_VERSION and zlib $ZLIB_VERSION. Every build passed check.sh and all of Sermon Studio's Go tests on its own system.
+          ffmpeg $FFMPEG_VERSION, built by [build.sh](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/build.sh) at ${{ github.sha }}: LGPL (no GPL or nonfree parts), static, with LAME $LAME_VERSION, Opus $OPUS_VERSION, zlib $ZLIB_VERSION and whisper.cpp $WHISPER_VERSION (the whisper filter, CPU only). Every build passed check.sh and all of Sermon Studio's Go tests on its own system.
 
           The exact sources are attached, and the licences in LICENSES.txt.
           NOTES

@@ -1,7 +1,8 @@
 #!/bin/sh
 # Builds a small LGPL ffmpeg (and ffprobe, for the tests) for one system, with what Sermon Studio uses: FLAC,
 # libmp3lame and libopus to encode, ffmpeg's own decoders, demuxers, muxers and filters (afftdn, ebur128,
-# alimiter ...), zlib. No --enable-gpl or --enable-nonfree, so it is LGPL; lame is LGPL, opus BSD, zlib zlib.
+# alimiter ...), zlib, and whisper.cpp for the whisper filter (transcription). No --enable-gpl or --enable-nonfree,
+# so it is LGPL; lame is LGPL, opus BSD, zlib zlib, whisper.cpp MIT.
 #
 #   ./build.sh <target>         linux-amd64 linux-arm64 (in Alpine, static), windows-amd64 (mingw-w64 on
 #                               Linux), darwin-arm64 darwin-amd64 (on a Mac of that kind)
@@ -18,8 +19,8 @@ prefix=$work/prefix
 mkdir -p "$out/sources" "$work" "$prefix"
 jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)
 
-fetch() { # fetch <url> <sha256>: into out/sources, checked
-	file=$out/sources/$(basename "$1")
+fetch() { # fetch <url> <sha256> [name]: into out/sources (as name), checked
+	file=$out/sources/${3:-$(basename "$1")}
 	if [ ! -f "$file" ]; then
 		curl -fsSL --retry 3 -o "$file.part" "$1"
 		mv "$file.part" "$file"
@@ -31,15 +32,18 @@ fetch "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" "$FFMPEG_SHA25
 fetch "https://downloads.sourceforge.net/project/lame/lame/$LAME_VERSION/lame-$LAME_VERSION.tar.gz" "$LAME_SHA256"
 fetch "https://downloads.xiph.org/releases/opus/opus-$OPUS_VERSION.tar.gz" "$OPUS_SHA256"
 fetch "https://zlib.net/fossils/zlib-$ZLIB_VERSION.tar.gz" "$ZLIB_SHA256"
+fetch "https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v$WHISPER_VERSION.tar.gz" "$WHISPER_SHA256" whisper.cpp-$WHISPER_VERSION.tar.gz
 
-host= ext= cross= extra_ldflags= extra_cflags=
+host= ext= cross= extra_ldflags= extra_cflags= cmake_cross= cxxlib=-lstdc++
 case $target in
 linux-*) extra_ldflags=-static ;;
 windows-amd64)
 	host=x86_64-w64-mingw32 ext=.exe
 	cross="--enable-cross-compile --target-os=mingw32 --arch=x86_64 --cross-prefix=$host-"
-	extra_ldflags="-static -static-libgcc" ;;
+	cmake_cross="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64 -DCMAKE_C_COMPILER=$host-gcc -DCMAKE_CXX_COMPILER=$host-g++"
+	extra_ldflags="-static -static-libgcc -static-libstdc++" ;;
 darwin-*)
+	cxxlib=-lc++
 	extra_cflags=-mmacosx-version-min=11.0
 	extra_ldflags=-mmacosx-version-min=11.0 ;;
 *) echo "unknown target $target" >&2; exit 2 ;;
@@ -61,13 +65,25 @@ cp "$work/opus-$OPUS_VERSION/config.guess" "$work/opus-$OPUS_VERSION/config.sub"
 	./configure -q $hostflag --prefix="$prefix" --disable-shared --enable-static --disable-doc --disable-extra-programs &&
 	make -s -j"$jobs" && make -s install) >/dev/null
 
+# whisper.cpp: static, CPU only (no Metal, BLAS or OpenMP, nothing from the build machine). GGML_NATIVE=OFF: not
+# tuned to the CPU it is built on; on x86 that means AVX2, FMA and F16C (2013 and later), on arm64 NEON.
+# Its whisper.pc lists the libraries in an order a static link cannot use and leaves out ggml-cpu and C++.
+(cd "$work/whisper.cpp-$WHISPER_VERSION" &&
+	# shellcheck disable=SC2086
+	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DCMAKE_INSTALL_LIBDIR=lib $cmake_cross \
+		-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
+		-DGGML_METAL=OFF -DGGML_BLAS=OFF -DGGML_CCACHE=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF \
+		-DWHISPER_BUILD_SERVER=OFF &&
+	cmake --build build -j"$jobs" && cmake --install build) >/dev/null
+sed -i.bak "s|^Libs:.*|Libs: -L\${libdir} -lwhisper -lggml -lggml-cpu -lggml-base $cxxlib -lm -lpthread|" "$prefix/lib/pkgconfig/whisper.pc"
+
 cd "$work/ffmpeg-$FFMPEG_VERSION"
 # shellcheck disable=SC2086
 ./configure --prefix="$prefix" $cross --pkg-config=pkg-config --pkg-config-flags=--static \
 	--extra-cflags="-I$prefix/include $extra_cflags" --extra-ldflags="-L$prefix/lib $extra_ldflags" \
 	--disable-debug --disable-doc --disable-ffplay --disable-network --disable-autodetect \
 	--disable-indevs --enable-indev=lavfi --disable-outdevs \
-	--enable-zlib --enable-libmp3lame --enable-libopus --enable-static --disable-shared >/dev/null ||
+	--enable-zlib --enable-libmp3lame --enable-libopus --enable-whisper --enable-static --disable-shared >/dev/null ||
 	{ tail -40 ffbuild/config.log >&2; exit 1; }
 make -s -j"$jobs" "ffmpeg$ext" "ffprobe$ext" >/dev/null
 cp "ffmpeg$ext" "$out/ffmpeg-$target$ext"
