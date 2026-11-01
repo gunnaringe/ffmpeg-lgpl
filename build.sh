@@ -80,6 +80,10 @@ cp "$work/opus-$OPUS_VERSION/config.guess" "$work/opus-$OPUS_VERSION/config.sub"
 		-DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_BMI2=OFF -DGGML_METAL=OFF -DGGML_BLAS=OFF -DGGML_CCACHE=OFF \
 		-DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF -DWHISPER_BUILD_SERVER=OFF &&
 	cmake --build build -j"$jobs" && cmake --install build) >/dev/null
+# ggml names its static libraries ggml*.a with MinGW, without the lib that -l looks for.
+for a in "$prefix"/lib/ggml*.a; do
+	[ -e "$a" ] && mv "$a" "$prefix/lib/lib$(basename "$a")"
+done
 sed -i.bak "s|^Libs:.*|Libs: -L\${libdir} -lwhisper -lggml -lggml-cpu -lggml-base $cxxlib -lm -lpthread|" "$prefix/lib/pkgconfig/whisper.pc"
 
 cd "$work/ffmpeg-$FFMPEG_VERSION"
