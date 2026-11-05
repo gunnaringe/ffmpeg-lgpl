@@ -1,8 +1,7 @@
 #!/bin/sh
 # Builds a small LGPL ffmpeg (and ffprobe, for the tests) for one system, with what Sermon Studio uses: FLAC,
 # libmp3lame and libopus to encode, ffmpeg's own decoders, demuxers, muxers and filters (afftdn, ebur128,
-# alimiter ...), zlib, and whisper.cpp for the whisper filter (transcription). No --enable-gpl or --enable-nonfree,
-# so it is LGPL; lame is LGPL, opus BSD, zlib zlib, whisper.cpp MIT.
+# alimiter ...), zlib. No --enable-gpl or --enable-nonfree, so it is LGPL; lame is LGPL, opus BSD, zlib zlib.
 #
 #   ./build.sh <target>         linux-amd64 linux-arm64 (in Alpine, static), windows-amd64 (mingw-w64 on
 #                               Linux), darwin-arm64 darwin-amd64 (on a Mac of that kind)
@@ -17,14 +16,16 @@ out=$here/out
 work=$here/work/$target
 prefix=$work/prefix
 mkdir -p "$out/sources" "$work" "$prefix"
-# This script goes with the sources: it changes FFmpeg's whisper filter (below), and the LGPL wants that shown.
-cp "$here/build.sh" "$out/sources/"
 jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)
 
-fetch() { # fetch <url> <sha256> [name]: into out/sources (as name), checked
-	file=$out/sources/${3:-$(basename "$1")}
+fetch() { # fetch <url> <sha256>: into out/sources, checked
+	file=$out/sources/$(basename "$1")
 	if [ ! -f "$file" ]; then
-		curl -fsSL --retry 3 -o "$file.part" "$1"
+		# ffmpeg.org drops connections at times: retry those too, for about a minute. Then the same file
+		# attached to this repository's latest release (the sources of the last build; checked the same way).
+		curl -fsSL --connect-timeout 30 --retry 3 --retry-delay 10 --retry-all-errors -o "$file.part" "$1" ||
+			curl -fsSL --retry 3 --retry-all-errors -o "$file.part" \
+				"https://github.com/gunnaringe/ffmpeg-lgpl/releases/latest/download/$(basename "$1")"
 		mv "$file.part" "$file"
 	fi
 	echo "$2  $file" | { sha256sum -c - 2>/dev/null || shasum -a 256 -c -; } >/dev/null || { echo "bad checksum: $file" >&2; rm -f "$file"; exit 1; }
@@ -34,21 +35,15 @@ fetch "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" "$FFMPEG_SHA25
 fetch "https://downloads.sourceforge.net/project/lame/lame/$LAME_VERSION/lame-$LAME_VERSION.tar.gz" "$LAME_SHA256"
 fetch "https://downloads.xiph.org/releases/opus/opus-$OPUS_VERSION.tar.gz" "$OPUS_SHA256"
 fetch "https://zlib.net/fossils/zlib-$ZLIB_VERSION.tar.gz" "$ZLIB_SHA256"
-fetch "https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v$WHISPER_VERSION.tar.gz" "$WHISPER_SHA256" whisper.cpp-$WHISPER_VERSION.tar.gz
 
-host= ext= cross= extra_ldflags= extra_cflags= cmake_cross= cxxlib=-lstdc++
+host= ext= cross= extra_ldflags= extra_cflags=
 case $target in
 linux-*) extra_ldflags=-static ;;
 windows-amd64)
 	host=x86_64-w64-mingw32 ext=.exe
 	cross="--enable-cross-compile --target-os=mingw32 --arch=x86_64 --cross-prefix=$host-"
-	# Windows 7's API level for whisper.cpp: Ubuntu's mingw-w64 lacks the Windows 11 thread throttling ggml would
-	# use (it keeps its threads off parked cores; without it, Windows may put them on fewer cores).
-	cmake_cross="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64 -DCMAKE_C_COMPILER=$host-gcc -DCMAKE_CXX_COMPILER=$host-g++
-		-DCMAKE_C_FLAGS_INIT=-D_WIN32_WINNT=0x0601 -DCMAKE_CXX_FLAGS_INIT=-D_WIN32_WINNT=0x0601"
-	extra_ldflags="-static -static-libgcc -static-libstdc++" ;;
+	extra_ldflags="-static -static-libgcc" ;;
 darwin-*)
-	cxxlib="-lc++ -framework Accelerate" # ggml's CPU code uses Accelerate's vDSP on a Mac
 	extra_cflags=-mmacosx-version-min=11.0
 	extra_ldflags=-mmacosx-version-min=11.0 ;;
 *) echo "unknown target $target" >&2; exit 2 ;;
@@ -70,44 +65,13 @@ cp "$work/opus-$OPUS_VERSION/config.guess" "$work/opus-$OPUS_VERSION/config.sub"
 	./configure -q $hostflag --prefix="$prefix" --disable-shared --enable-static --disable-doc --disable-extra-programs &&
 	make -s -j"$jobs" && make -s install) >/dev/null
 
-# whisper.cpp: static, CPU only (no Metal, BLAS or OpenMP, nothing from the build machine). GGML_NATIVE=OFF: not
-# tuned to the CPU it is built on. On x86 it needs AVX and F16C (Intel from 2012, Ivy Bridge; AMD from 2011), not
-# AVX2 or FMA: servers and church computers of that age are common. Only the whisper filter uses them; on an older
-# processor it stops with "Illegal instruction" (Sermon Studio checks the processor first). arm64: NEON.
-# Its whisper.pc lists the libraries in an order a static link cannot use and leaves out ggml-cpu and C++.
-(cd "$work/whisper.cpp-$WHISPER_VERSION" &&
-	# shellcheck disable=SC2086
-	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DCMAKE_INSTALL_LIBDIR=lib $cmake_cross \
-		-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
-		-DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_BMI2=OFF -DGGML_METAL=OFF -DGGML_BLAS=OFF -DGGML_CCACHE=OFF \
-		-DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF -DWHISPER_BUILD_SERVER=OFF &&
-	cmake --build build -j"$jobs" && cmake --install build) >/dev/null
-# ggml names its static libraries ggml*.a with MinGW, without the lib that -l looks for.
-for a in "$prefix"/lib/ggml*.a; do
-	[ -e "$a" ] && mv "$a" "$prefix/lib/lib$(basename "$a")"
-done
-sed -i.bak "s|^Libs:.*|Libs: -L\${libdir} -lwhisper -lggml -lggml-cpu -lggml-base $cxxlib -lm -lpthread|" "$prefix/lib/pkgconfig/whisper.pc"
-
 cd "$work/ffmpeg-$FFMPEG_VERSION"
-# Two fixes to the whisper filter. It moves what is left of its buffer to the start with memcpy, and the two overlap whenever more is
-# left than was transcribed: undefined, and a fortified libc (Alpine's) stops it with "Illegal instruction".
-# memmove is what it means (still so in FFmpeg's master).
-sed -i.bak 's/memcpy(wctx->audio_buffer, wctx->audio_buffer + samples,/memmove(wctx->audio_buffer, wctx->audio_buffer + samples,/' \
-	libavfilter/af_whisper.c
-# With a VAD model it transcribes at the first pause of half a second, so speech goes to whisper a sentence (3-5 s)
-# at a time; whisper works on 30 s whatever it is given, so that is about six times slower than whole windows. Wait
-# until the queue is half full, then cut at the last pause.
-sed -i.bak 's|^    if (wctx->ctx_vad$|    if (wctx->ctx_vad \&\& wctx->audio_buffer_fill_size >= wctx->audio_buffer_queue_size / 2|' \
-	libavfilter/af_whisper.c
-grep -q 'memmove(wctx->audio_buffer, wctx->audio_buffer + samples,' libavfilter/af_whisper.c &&
-	grep -q 'if (wctx->ctx_vad && wctx->audio_buffer_fill_size >= wctx->audio_buffer_queue_size / 2' libavfilter/af_whisper.c ||
-	{ echo "the whisper filter's fixes did not apply" >&2; exit 1; }
 # shellcheck disable=SC2086
 ./configure --prefix="$prefix" $cross --pkg-config=pkg-config --pkg-config-flags=--static \
 	--extra-cflags="-I$prefix/include $extra_cflags" --extra-ldflags="-L$prefix/lib $extra_ldflags" \
 	--disable-debug --disable-doc --disable-ffplay --disable-network --disable-autodetect \
 	--disable-indevs --enable-indev=lavfi --disable-outdevs \
-	--enable-zlib --enable-libmp3lame --enable-libopus --enable-whisper --enable-static --disable-shared >/dev/null ||
+	--enable-zlib --enable-libmp3lame --enable-libopus --enable-static --disable-shared >/dev/null ||
 	{ tail -40 ffbuild/config.log >&2; exit 1; }
 make -s -j"$jobs" "ffmpeg$ext" "ffprobe$ext" >/dev/null
 cp "ffmpeg$ext" "$out/ffmpeg-$target$ext"
