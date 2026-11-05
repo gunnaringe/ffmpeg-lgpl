@@ -12,8 +12,8 @@ a plain ffmpeg anyone can use.
 
 ## What is in it
 
-- **ffmpeg 9.0.2** with all of its own decoders, demuxers, muxers and filters, LAME 3.100 (MP3), Opus 1.5.2,
-  zlib 1.3.1 and whisper.cpp 1.9.5 (the `whisper` filter: speech to text, on the CPU; the models are not included). The versions and SHA-256 of every source are in [`versions`](versions).
+- **ffmpeg 9.0.2** with all of its own decoders, demuxers, muxers and filters, LAME 3.100 (MP3), Opus 1.5.2 and
+  zlib 1.3.1. The versions and SHA-256 of every source are in [`versions`](versions).
 - **LGPL:** built without `--enable-gpl` and `--enable-nonfree`. Nothing is taken from the build machine
   (`--disable-autodetect`), and there is no network or devices apart from lavfi.
 - ffprobe is built too, for the tests, but not published.
@@ -32,12 +32,12 @@ sources, `LICENSES.txt` and `SHA256SUMS`. A new build (another version or other 
 ## Build it yourself
 
 ```bash
-./build.sh linux-amd64        # in Alpine: see the workflow for the packages (cmake too); out/ffmpeg-linux-amd64
+./build.sh linux-amd64        # in Alpine: see the workflow for the packages; out/ffmpeg-linux-amd64
 ./check.sh out/ffmpeg-linux-amd64
 ```
 
 ## Licences
 
 The scripts here are Apache 2.0 ([LICENSE](LICENSE)). What they build is not: ffmpeg is LGPL 2.1 or later,
-LAME LGPL 2 or later, Opus BSD, zlib under the zlib licence and whisper.cpp MIT. Each release has them in `LICENSES.txt`, with the
+LAME LGPL 2 or later, Opus BSD and zlib under the zlib licence. Each release has them in `LICENSES.txt`, with the
 exact sources.

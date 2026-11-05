@@ -10,7 +10,7 @@ filters=$("$ff" -hide_banner -filters)
 for e in flac libmp3lame libopus aac pcm_s16le pcm_s24le; do
 	echo "$encoders" | grep -qE "^ *[A-Z.]+ +$e " || { echo "$ff: no encoder $e" >&2; exit 1; }
 done
-for f in afftdn ebur128 alimiter acompressor dynaudnorm afade aformat aresample asetpts astats concat pan volume volumedetect whisper; do
+for f in afftdn ebur128 alimiter acompressor dynaudnorm afade aformat aresample asetpts astats concat pan volume volumedetect; do
 	echo "$filters" | grep -qE "^ *[A-Z.]+ +$f " || { echo "$ff: no filter $f" >&2; exit 1; }
 done
 muxers=$("$ff" -hide_banner -muxers)
