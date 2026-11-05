@@ -21,8 +21,11 @@ jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)
 fetch() { # fetch <url> <sha256>: into out/sources, checked
 	file=$out/sources/$(basename "$1")
 	if [ ! -f "$file" ]; then
-		# ffmpeg.org drops connections at times: retry those too, for about two minutes.
-		curl -fsSL --connect-timeout 30 --retry 6 --retry-delay 10 --retry-all-errors -o "$file.part" "$1"
+		# ffmpeg.org drops connections at times: retry those too, for about a minute. Then the same file
+		# attached to this repository's latest release (the sources of the last build; checked the same way).
+		curl -fsSL --connect-timeout 30 --retry 3 --retry-delay 10 --retry-all-errors -o "$file.part" "$1" ||
+			curl -fsSL --retry 3 --retry-all-errors -o "$file.part" \
+				"https://github.com/gunnaringe/ffmpeg-lgpl/releases/latest/download/$(basename "$1")"
 		mv "$file.part" "$file"
 	fi
 	echo "$2  $file" | { sha256sum -c - 2>/dev/null || shasum -a 256 -c -; } >/dev/null || { echo "bad checksum: $file" >&2; rm -f "$file"; exit 1; }
