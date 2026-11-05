@@ -1,6 +1,6 @@
 # What build.sh builds. RELEASE names the GitHub release the builds are published as: change it (the
 # number after the version) with anything that changes the builds.
-RELEASE=9.0.2-1
+RELEASE=9.0.2-3
 FFMPEG_VERSION=9.0.2
 FFMPEG_SHA256=8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
 LAME_VERSION=3.100
