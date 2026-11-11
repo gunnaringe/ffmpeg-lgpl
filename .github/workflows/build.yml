@@ -30,7 +30,7 @@ jobs:
           - { target: darwin-amd64, os: macos-15-intel }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build (Linux, static in Alpine)
         if: startsWith(matrix.target, 'linux-')
         run: |
@@ -74,8 +74,8 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: gunnaringe/sermon-studio
           path: studio
@@ -110,7 +110,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
