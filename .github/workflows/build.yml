@@ -46,13 +46,13 @@ jobs:
         run: |
           brew install nasm pkgconf
           ./build.sh ${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-${{ matrix.target }}
           path: out/ff*-${{ matrix.target }}*
           if-no-files-found: error
       - if: matrix.target == 'linux-amd64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sources
           path: out/sources/
